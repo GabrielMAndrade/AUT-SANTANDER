@@ -1,0 +1,57 @@
+https://www.parceirosantander.com.br/spa-base/
+
+
+PRECISO QUE SEJA ADICIONADO O LOGIN ANTES DO CODIGO COMEÇAR, ASSIM COMO O CODIGO DO CONVENIO, DEPOIS DISSO QUERO QUE O CODIGO APENAS COMEÇE QUANDO EU APERTAR ENTER NO CMD DO VSCODE, POIS AINDA É NECESSARIO UM CODIGO DE AUTENTICAÇÃO DE DOIS FATORES PARA ENTRAR NO SITE
+QUERO QUE SEJA CONSULTADO OS CPF'S QUE SERÃO ADICIONADOS EM UM TXT DENTRO DO PROJETO, DENTRO DESSE TXT SEPARADO POR VIRGULAS TERÁ O CPF DO CLIENTE E O NOME, EM ANEXO TEM AS DUAS COLUNAS PARA VC TRABALHAR EM CIMA
+
+quero que tenha um csv que seja atualizado ao vivo, e sempre deixe o status se foi encontrado margem ou não, quero que seja 
+nome;cpf;margem;status
+
+quando não encontra margem preenche margem com 0 e status com ERRO
+
+quando não encontrar erro, a margem estará no xpath: /html/body/fve-root/fve-logged-area/main/fve-mfe-mob-element/div/csg-stepper/section/div/csg-employer-page/div/online-form/section[1]/section[2]/dss-form-field[2]/div/input
+quando encontrar margem, cole a margem
+
+INFORMAÇÕES QUE TERÃO QUE SER DADAS ANTES DE COMEÇAR A AUTOMAÇÃO
+Login:
+Senha:
+
+Codigo do convenio: 
+
+
+
+-------------
+
+
+NOME: VAI ESTAR SEPARADO POR VIRGULA
+CPF:
+NUMERO DE CELULAR: 51998554621
+
+XPATH'S:
+
+CAMPO NOME: /html/body/fve-root/fve-logged-area/main/fve-mfe-recommendation-element/fve-verify-account/div/form/div[2]/dss-form-field/div/input
+CAMPO CPF: /html/body/fve-root/fve-logged-area/main/fve-mfe-recommendation-element/fve-verify-account/div/form/div[3]/dss-form-field/div/input
+CAMPO NUMERO DE CELULAR : /html/body/fve-root/fve-logged-area/main/fve-mfe-recommendation-element/fve-verify-account/div/form/div[4]/dss-form-field/div/input
+
+BOTAO VER PRODUTOS: /html/body/fve-root/fve-logged-area/main/fve-mfe-recommendation-element/fve-verify-account/div/form/div[5]/button
+ESPERA
+BOTAO SIMULAR: /html/body/fve-root/fve-logged-area/main/fve-mfe-recommendation-element/fve-select-product/div[2]/div/div/div/div/dss-product-card/div/dss-product-card-actions/button
+ESPERA
+BOTAO SEGUIR SEM CONSULTA SRCC: /html/body/fve-root/fve-logged-area/main/fve-mfe-recommendation-element/fve-select-product/app-dialog-srcc/dss-dialog/div/div/dss-dialog-footer/button[1]
+ESPERA
+BOTAO SIMULAR PROPOSTA: /html/body/fve-root/fve-logged-area/main/fve-mfe-mob-element/div/csg-home/section/section[2]/section[1]/div/button
+ESPERA
+CLIACA NO BOTAO CODIGO DO CONVENIO: /html/body/fve-root/fve-logged-area/main/fve-mfe-mob-element/div/csg-stepper/section/div/csg-employer-page/div/div/csg-agreement-form/section/div/main/form/section[1]/div/div[1]/dss-form-field/div/dss-dropdown/div/button
+CLICA NO CODIGO DO CONVENIO: /html/body/fve-root/fve-logged-area/main/fve-mfe-mob-element/div/csg-stepper/section/div/csg-employer-page/div/div/csg-agreement-form/section/div/main/form/section[1]/div/div[1]/dss-form-field/div/dss-dropdown/div/ul/li[2]/a/span/option
+CLICA NO INPUT PARA ESCREVER O CODIGO DO CONVENIO /html/body/fve-root/fve-logged-area/main/fve-mfe-mob-element/div/csg-stepper/section/div/csg-employer-page/div/div/csg-agreement-form/section/div/main/form/section[1]/div/div[2]/csg-input-autocomplete/form/dss-search-bar/div/div/input
+Clica em Buscar: /html/body/fve-root/fve-logged-area/main/fve-mfe-mob-element/div/csg-stepper/section/div/csg-employer-page/div/div/csg-agreement-form/section/div/main/form/section[1]/div/div[3]/button
+
+
+Se esse icone for encontrado significa erro, então pula para o proximo cpf 
+icone de erro: /html/body/fve-root/fve-logged-area/main/fve-mfe-mob-element/div/csg-stepper/section/section/div[1]/csg-warning/dss-alert-banner/div/div/span
+
+
+PARA ENTRAR NA ABA DE CONSULTA CPF
+BOTAO PRODUTOS: /html/body/fve-root/fve-logged-area/fve-menu/dss-menu/aside/div[2]/dss-menu-item[2]/div/div
+
+quero que o headless eu possa ativar e desativar dentro do env com true ou false

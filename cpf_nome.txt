@@ -1,0 +1,5 @@
+# Preencha abaixo os CPF e nomes reais, um par por linha.
+# Ordem aceita: CPF,NOME ou NOME,CPF
+# Exemplo de formato (NÃO é um CPF real):
+# 00000000000,NOME EXEMPLO
+# 00000000001,OUTRA PESSOA
