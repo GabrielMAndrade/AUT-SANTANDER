@@ -1,0 +1,14 @@
+# Credenciais, dados pessoais e resultados de operacoes - NAO PUBLICAR
+.env
+.env.*
+cpf_nome.txt
+resultado_margens.csv
+perfil_chrome/
+diagnosticos/
+*.png
+# Ambiente e temporarios
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.DS_Store
