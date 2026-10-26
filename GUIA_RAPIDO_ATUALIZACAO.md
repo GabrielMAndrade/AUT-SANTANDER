@@ -4,13 +4,13 @@
 
 1. Faça backup do projeto original, especialmente de `cpf_nome.txt` e `resultado_margens.csv`.
 2. Descompacte este ZIP em uma **nova pasta**.
-3. Copie apenas `cpf_nome.txt` e, se quiser retomar do ponto em que parou, `resultado_margens.csv` **do projeto antigo para a nova pasta**, sem sobrescrever os arquivos anteriores.
-4. Abra `main.py` e confira `CELULAR`, `TEMPO_ESPERA`, `REPROCESSAR_ERROS` e `LIMITE_ERROS_SEGUIDOS`.
+3. Copie `cpf_nome.txt`. Guarde o `resultado_margens.csv` anterior apenas como histórico: o código não o utiliza mais para pular CPFs. Os novos CSVs ficam na pasta `resultados/`.
+4. Abra `main.py` e confira `CELULAR`, `TEMPO_ESPERA` e `LIMITE_ERROS_SEGUIDOS`. Não há mais opção `REPROCESSAR_ERROS` no fluxo por TXT.
 5. Ajuste os XPaths do dicionário `XP` somente se os elementos no portal tiverem mudado. Não altere XPaths sem verificar a tela real.
 6. Instale as dependências: `python -m pip install -r requirements.txt`.
 7. Abra `abrir_chrome.cmd`, faça login e o segundo fator **manualmente**.
 8. Em outro terminal, teste `python main.py --verificar` e então `python main.py --limite 1`.
-9. Verifique o resultado do primeiro cliente no portal e no CSV. Só então execute `python main.py` (ou `--limite N`) para continuar consultas autorizadas.
+9. Verifique o resultado do primeiro cliente no portal e no CSV. Ao executar novamente `python main.py`, **a lista recomeça no primeiro CPF**, com outro CSV. Para seguir de outra posição, use `--inicio N` ou `--cpf-inicial CPF`.
 
 ## O que mudou
 
@@ -111,3 +111,27 @@ Se a tela não avançar, verifique se o XPath corresponde ao botão visível na 
 - Não há uso de headless, alteração de propriedades do navegador ou scripts para ocultar Selenium.
 
 **Teste recomendado:** após autenticação manual, execute `python main.py --limite 2` e confirme que a sidebar abriu ao término do primeiro CPF e que o segundo começa no formulário correto.
+
+## Timeout de botões: seguir para o próximo CPF
+
+- `TEMPO_BOTAO = 10` no `main.py` limita a espera para **Ver Produtos** e **Simular (seleção do produto)**. Se um deles não aparecer ou permanecer desabilitado, o CPF é **PULADO**, sem gravar `ERRO` no CSV desta execução.
+- O botão **Simular Proposta** mantém a busca por texto (10 s), com atraso de 5 s antes do clique, e também pula o CPF se não ficar disponível.
+- O botão **Buscar** passa a pular após no máximo 10 s; o seletor do convênio também pula o CPF se não aparecer durante a espera da etapa.
+- Depois de um pulo, o robô **tenta voltar ao menu Produtos**, com hover na lateral, e só então inicia o próximo CPF. Se o retorno falhar, **interrompe** para não misturar clientes.
+- O CPF pulado fica **pendente** para outra execução, porque timeout de botão **não comprova** que o produto é realmente indisponível. O terminal mostra a etapa ausente.
+- A pausa de 5 s antes de **Simular Proposta** e as pausas totais de aproximadamente 2 s no convênio foram preservadas.
+
+Teste recomendado: `python main.py --limite 2` após abrir o Chrome e concluir o login manual. O primeiro CPF pode ser pulado; o robô deve retornar a Produtos e iniciar o segundo. Consulte apenas clientes para os quais exista autorização.
+
+## Atualização: novo CSV e início manual da lista
+
+O programa **não usa o CSV de execuções anteriores** para decidir quais clientes consultar. Cada `python main.py` cria um `resultados/resultado_margens_*.csv` novo e começa do início do `cpf_nome.txt`, inclusive se você acabou de fazer um teste `--limite 1`. Os CSVs anteriores permanecem disponíveis para conferência; nenhum é reescrito. O CSV novo é salvo após cada cliente com resultado, mesmo em execução parcial.
+
+```powershell
+python main.py                        # lista inteira
+python main.py --inicio 300           # começa pelo 300º CPF válido do TXT
+python main.py --cpf-inicial 00000000001  # começa pelo CPF indicado
+python main.py --inicio 300 --limite 2    # consulta apenas duas posições
+```
+
+No **modo API da VPS**, reiniciar o servidor não percorre `cpf_nome.txt`: cada envio do n8n é independente e possui ID próprio na fila SQLite. Para criar outra consulta, envie outro POST, usando uma chave de idempotência diferente caso esse cabeçalho seja utilizado.

@@ -28,7 +28,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from dados import Cliente, ResultadoCSV, ler_clientes
+from dados import Cliente, ResultadoCSV, ler_clientes, selecionar_clientes, novo_caminho_csv
 from conexao_chrome import conectar_chrome, selecionar_aba_portal, fechar_chrome_dedicado
 
 
@@ -38,12 +38,12 @@ PASTA = Path(__file__).resolve().parent
 CELULAR = "51998554621"
 TEMPO_ESPERA = 35
 TEMPO_SIMULAR = 10  # Tempo máximo para localizar o botão Simular Proposta por texto.
+TEMPO_BOTAO = 10  # Botões de consulta não encontrados: pular CPF após 10 s.
 DELAY_ANTES_SIMULAR = 5.0  # Espera após o botão aparecer, antes de clicar.
 INTERVALO_CONVENIO = 0.4  # Cinco pausas de 0,4 s: aproximadamente 2 s fixos no convênio.
 TEMPO_ABRIR_SIDEBAR = 8  # Tempo máximo para a opção Produtos aparecer após o movimento do mouse.
 LIMITE_PULOS_SEGUIDOS = 0  # 0 = continuar após CPF pulado; um número >0 ativa parada de segurança.
 LIMITE_LOGIN = 300  # 5 minutos
-REPROCESSAR_ERROS = False
 SALVAR_DIAGNOSTICO = False
 # Limita sequências de avisos/tentativas sem margem para revisar o portal.
 LIMITE_ERROS_SEGUIDOS = 0  # 0 = continuar mesmo com margem não encontrada; >0 ativa parada.
@@ -298,7 +298,26 @@ def localizar_simular_por_texto(driver):
 
 
 class PularCliente(FalhaNavegacao):
-    """Falha recuperável: CPF fica PENDENTE, sem gravação de erro no CSV."""
+    """Etapa indisponível nesta tentativa; CPF permanece pendente, sem erro no CSV.
+
+    Um timeout de botão não prova, isoladamente, que o produto é indisponível.
+    """
+
+
+def clicar_botao_ou_pular(driver, xpath: str, nome: str, timeout: float = TEMPO_BOTAO) -> None:
+    """Se um botão de consulta não ficar clicável no prazo, pula o CPF.
+
+    Não transforma falha de clique nem erro de sessão em indisponibilidade.
+    O retorno ao formulário Produtos é obrigatório antes do próximo CPF.
+    """
+    try:
+        elemento = aguardar_clicavel(driver, xpath, timeout=timeout)
+    except TimeoutException as exc:
+        raise PularCliente(
+            f'Botão "{nome}" não encontrado/habilitado em {timeout:g} segundos. '
+            'Pulando este CPF e retornando a Produtos.'
+        ) from exc
+    clicar_elemento(driver, elemento)
 
 
 def _dropdown_convenio_visivel(driver):
@@ -474,7 +493,10 @@ def escolher_codigo_convenio(driver, convenio: str, tempo_espera: int) -> None:
             _dropdown_convenio_visivel
         )
     except TimeoutException as exc:
-        raise FalhaNavegacao('Não achei o seletor de pesquisa do convênio.') from exc
+        raise PularCliente(
+            'O seletor de pesquisa do convênio não ficou disponível no prazo. '
+            'Pulando CPF e retornando a Produtos.'
+        ) from exc
 
     if not _codigo_selecionado(driver):
         print('   [Convênio] abrindo tipos de pesquisa...')
@@ -535,9 +557,12 @@ def escolher_codigo_convenio(driver, convenio: str, tempo_espera: int) -> None:
         raise FalhaNavegacao('O tipo Código do convênio foi perdido durante a digitação.')
     print('   [Convênio] código validado; clicando Buscar...')
     try:
-        buscar = _buscar_por_texto(driver, tempo_espera)
+        buscar = _buscar_por_texto(driver, min(TEMPO_BOTAO, tempo_espera))
     except TimeoutException as exc:
-        raise FalhaNavegacao('Botão Buscar não apareceu habilitado após preencher convênio.') from exc
+        raise PularCliente(
+            'Botão Buscar não apareceu habilitado após preencher o convênio. '
+            'Pulando CPF e retornando a Produtos.'
+        ) from exc
     time.sleep(INTERVALO_CONVENIO)
     clicar_elemento(driver, buscar)
 
@@ -580,8 +605,9 @@ def consultar(driver, cliente: Cliente, convenio: str, celular: str, tempo_esper
     digitar(driver, XP["nome"], cliente.nome, tempo_espera)
     digitar(driver, XP["cpf"], cliente.cpf, tempo_espera)
     digitar(driver, XP["celular"], celular, tempo_espera)
-    clicar(driver, XP["ver_produtos"], tempo_espera)
-    clicar(driver, XP["simular"], tempo_espera)
+    # Botões indisponíveis não abortam o lote: passam ao próximo CPF.
+    clicar_botao_ou_pular(driver, XP["ver_produtos"], "Ver Produtos")
+    clicar_botao_ou_pular(driver, XP["simular"], "Simular (seleção do produto)")
 
     # Aguardar a página csg-home, clicar no botão Simular informado e
     # confirmar o formulário de convênio antes de preencher/buscar.
@@ -627,7 +653,6 @@ def solicitar_codigo_convenio() -> str:
 def executar():
     celular = re.sub(r"\D", "", CELULAR)
     tempo_espera = TEMPO_ESPERA
-    reprocessar_erros = REPROCESSAR_ERROS
     salvar_captura = SALVAR_DIAGNOSTICO
     if not (10 <= len(celular) <= 11):
         raise ValueError("CELULAR deve conter 10 ou 11 digitos.")
@@ -636,13 +661,22 @@ def executar():
 
     parser = argparse.ArgumentParser(description="Consultor de margem Santander")
     parser.add_argument("--verificar", action="store_true", help="Validar o TXT sem abrir o site")
+    inicio_grupo = parser.add_mutually_exclusive_group()
+    inicio_grupo.add_argument(
+        "--inicio", type=int, default=1,
+        help="Posição inicial do TXT (começa em 1; padrão: primeiro CPF)",
+    )
+    inicio_grupo.add_argument(
+        "--cpf-inicial", type=str,
+        help="Começar neste CPF do TXT, incluindo-o na execução",
+    )
     parser.add_argument(
         "--limite", type=int, default=0,
-        help="Consultar apenas N CPFs pendentes (0 = todos; use --limite 1 no primeiro teste)",
+        help="Consultar apenas N CPFs a partir do início escolhido (0 = todos)",
     )
     argumentos = parser.parse_args()
-    if argumentos.limite < 0:
-        parser.error("--limite deve ser 0 ou um número positivo")
+    if argumentos.limite < 0 or argumentos.inicio < 1:
+        parser.error("--limite deve ser >= 0 e --inicio deve ser >= 1")
 
     clientes = ler_clientes(PASTA / "cpf_nome.txt")
     if not clientes:
@@ -652,21 +686,23 @@ def executar():
         print("TXT validado. Nenhum login ou consulta foi realizado.")
         return
 
-    convenio = solicitar_codigo_convenio()
-    resultado = ResultadoCSV(PASTA / "resultado_margens.csv", clientes)
-    pendentes = [c for c in clientes if not resultado.ja_processado(c.cpf, reprocessar_erros)]
-    total_pendentes = len(pendentes)
-    if argumentos.limite:
-        pendentes = pendentes[:argumentos.limite]
-    print(
-        f"Pendentes na lista: {total_pendentes} | "
-        f"Selecionados nesta execução: {len(pendentes)} | "
-        f"Já registrados: {len(clientes) - total_pendentes}"
+    # Cada execução é independente: nenhuma informação de CSV antigo é usada
+    # para pular clientes. Os CSVs anteriores permanecem preservados.
+    selecionados, posicao_inicial = selecionar_clientes(
+        clientes,
+        inicio=argumentos.inicio,
+        cpf_inicial=argumentos.cpf_inicial,
+        limite=argumentos.limite,
     )
-    print(f"CSV: {PASTA / 'resultado_margens.csv'}")
-    if not pendentes:
-        print("Nenhum CPF pendente. Para refazer os ERRO, defina REPROCESSAR_ERROS = True no main.py.")
-        return
+    convenio = solicitar_codigo_convenio()
+    caminho_csv = novo_caminho_csv(PASTA / "resultados")
+    resultado = ResultadoCSV(caminho_csv, selecionados)
+    print(
+        f"Início: posição {posicao_inicial} do TXT | "
+        f"Clientes desta execução: {len(selecionados)} de {len(clientes)} | "
+        "CSV anterior: ignorado"
+    )
+    print(f"CSV exclusivo desta execução: {caminho_csv}")
 
     navegador = None
     try:
@@ -697,11 +733,11 @@ def executar():
 
         erros_seguidos = 0
         pulos_seguidos = 0
-        for indice, cliente in enumerate(pendentes, start=1):
+        for indice, cliente in enumerate(selecionados, start=1):
             if not sessao_autenticada(navegador):
                 print("Sessão expirada ou janela fechada; execução interrompida sem marcar mais CPFs.")
                 break
-            print(f"[{indice}/{len(pendentes)}] Consultando {cliente.nome} | CPF final {cliente.cpf[-4:]}")
+            print(f"[{indice}/{len(selecionados)}] Consultando {cliente.nome} | CPF final {cliente.cpf[-4:]}")
             try:
                 margem, status = consultar_com_retorno(
                     navegador, cliente, convenio, celular, tempo_espera
@@ -712,10 +748,10 @@ def executar():
             except PularCliente as exc:
                 pulos_seguidos += 1
                 print(f'   [PULADO] {exc}')
-                print('   CPF permanece pendente; nada gravado no CSV.')
+                print('   CPF pulado nesta execução; nada gravado no CSV atual.')
                 if LIMITE_PULOS_SEGUIDOS and pulos_seguidos >= LIMITE_PULOS_SEGUIDOS:
                     print(
-                        f'{pulos_seguidos} CPFs seguidos sem o botão Simular. '
+                        f'{pulos_seguidos} CPFs seguidos com etapas de consulta indisponíveis. '
                         'Interrompendo para evitar repetir uma falha da página.'
                     )
                     break
@@ -749,7 +785,7 @@ def executar():
                     "Pausado para verificar se há erro sistêmico ou restrição."
                 )
                 break
-        print("\nExecução encerrada. CSV atualizado no disco após cada consulta.")
+        print(f"\nExecução encerrada. Arquivo desta execução: {caminho_csv}")
     finally:
         if navegador is not None:
             try:

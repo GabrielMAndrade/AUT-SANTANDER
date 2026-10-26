@@ -6,6 +6,8 @@ import csv
 import os
 import re
 import tempfile
+from datetime import datetime
+from uuid import uuid4
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -72,8 +74,57 @@ def ler_clientes(caminho: Path) -> list[Cliente]:
     return clientes
 
 
+def selecionar_clientes(
+    clientes: list[Cliente], *, inicio: int = 1,
+    cpf_inicial: str | None = None, limite: int = 0,
+) -> tuple[list[Cliente], int]:
+    """Seleciona um trecho da lista ATUAL, sem consultar CSV de outras execuções.
+
+    A posição de início começa em 1. O CPF inicial, quando fornecido,
+    corresponde ao próprio cliente e aos seguintes, na ordem do TXT.
+    """
+    if not clientes:
+        raise ValueError("A lista de clientes está vazia.")
+    if inicio < 1 or limite < 0:
+        raise ValueError("--inicio precisa ser >= 1 e --limite >= 0.")
+
+    if cpf_inicial is not None:
+        cpf = limpar_cpf(cpf_inicial)
+        if len(cpf) != 11:
+            raise ValueError("--cpf-inicial precisa conter 11 dígitos.")
+        indice = next((i for i, cliente in enumerate(clientes) if cliente.cpf == cpf), None)
+        if indice is None:
+            raise ValueError("--cpf-inicial não encontrado no cpf_nome.txt.")
+    else:
+        indice = inicio - 1
+        if indice >= len(clientes):
+            raise ValueError(
+                f"--inicio={inicio} ultrapassa os {len(clientes)} clientes do TXT."
+            )
+
+    selecionados = clientes[indice:]
+    if limite:
+        selecionados = selecionados[:limite]
+    return selecionados, indice + 1
+
+
+def novo_caminho_csv(pasta_saida: Path) -> Path:
+    """Gera um nome novo por execução; arquivos antigos não são reutilizados.
+
+    A gravação inicial é realizada por ResultadoCSV. Um UUID reduz o risco
+    de colisão inclusive em execuções iniciadas no mesmo segundo.
+    """
+    pasta_saida = Path(pasta_saida)
+    pasta_saida.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name == "posix":
+        # Nomes e margens são dados pessoais: restringir diretório na VPS.
+        os.chmod(pasta_saida, 0o700)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    return pasta_saida / f"resultado_margens_{timestamp}_{uuid4().hex[:8]}.csv"
+
+
 class ResultadoCSV:
-    """Regrava o CSV de forma atômica após CADA cliente; retoma sem duplicar."""
+    """Grava de forma atômica após cada cliente. Um caminho novo inicia vazio."""
 
     CABECALHO = ("nome", "cpf", "margem", "status")
 

@@ -1,0 +1,21 @@
+[Unit]
+Description=API de consultas Santander - Soma
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adeque /opt/santander e o nome do usuário Linux.
+User=santander
+Group=santander
+WorkingDirectory=/opt/santander
+Environment=PYTHONUNBUFFERED=1
+Environment=DISPLAY=:99
+ExecStart=/opt/santander/.venv/bin/uvicorn api_santander:app --host 127.0.0.1 --port 6767 --workers 1
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
